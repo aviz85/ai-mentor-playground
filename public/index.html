@@ -120,6 +120,35 @@
         .btn-send:hover {
             background-color: #0056b3;
         }
+        .nav-tabs .nav-link {
+            color: #495057;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-bottom: none;
+            border-top-left-radius: 15px;
+            border-top-right-radius: 15px;
+        }
+        .nav-tabs .nav-link.active {
+            color: #495057;
+            background-color: #fff;
+            border-color: #dee2e6 #dee2e6 #fff;
+        }
+        .tab-content {
+            border: 1px solid #dee2e6;
+            border-top: none;
+            border-bottom-left-radius: 15px;
+            border-bottom-right-radius: 15px;
+            padding: 15px;
+        }
+        .custom-prompt-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        .custom-prompt-actions button {
+            flex: 1;
+            margin: 0 5px;
+        }
     </style>
 </head>
 <body>
@@ -147,9 +176,37 @@
             </div>
             <div class="col-md-9">
                 <div class="p-3">
-                    <div class="system-prompt">
-                        <label for="system-prompt-input">System Prompt:</label>
-                        <textarea id="system-prompt-input" placeholder="Enter system prompt here...">You are a helpful AI assistant.</textarea>
+                    <ul class="nav nav-tabs" id="systemPromptTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="default-tab" data-bs-toggle="tab" data-bs-target="#default" type="button" role="tab" aria-controls="default" aria-selected="true">Default</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="creative-tab" data-bs-toggle="tab" data-bs-target="#creative" type="button" role="tab" aria-controls="creative" aria-selected="false">Creative</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="analytical-tab" data-bs-toggle="tab" data-bs-target="#analytical" type="button" role="tab" aria-controls="analytical" aria-selected="false">Analytical</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="custom-tab" data-bs-toggle="tab" data-bs-target="#custom" type="button" role="tab" aria-controls="custom" aria-selected="false">Custom</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content" id="systemPromptTabContent">
+                        <div class="tab-pane fade show active" id="default" role="tabpanel" aria-labelledby="default-tab">
+                            <textarea id="default-prompt" class="form-control" rows="3" readonly>You are a helpful AI assistant.</textarea>
+                        </div>
+                        <div class="tab-pane fade" id="creative" role="tabpanel" aria-labelledby="creative-tab">
+                            <textarea id="creative-prompt" class="form-control" rows="3" readonly>You are a creative AI assistant. Think outside the box and provide unique, imaginative solutions.</textarea>
+                        </div>
+                        <div class="tab-pane fade" id="analytical" role="tabpanel" aria-labelledby="analytical-tab">
+                            <textarea id="analytical-prompt" class="form-control" rows="3" readonly>You are an analytical AI assistant. Provide detailed, fact-based responses with logical reasoning.</textarea>
+                        </div>
+                        <div class="tab-pane fade" id="custom" role="tabpanel" aria-labelledby="custom-tab">
+                            <textarea id="custom-prompt" class="form-control" rows="3" placeholder="Enter your custom system prompt here..."></textarea>
+                            <div class="custom-prompt-actions">
+                                <button class="btn btn-primary btn-sm" onclick="saveCustomPrompt()">Save Custom Prompt</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteCustomPrompt()">Delete Custom Prompt</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="chat-body" id="chat-box"></div>
@@ -182,6 +239,7 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let variables = {};
         let models = {};
@@ -208,9 +266,26 @@
         document.getElementById('provider-select-1').addEventListener('change', () => updateModelSelect(1));
         document.getElementById('provider-select-2').addEventListener('change', () => updateModelSelect(2));
 
+        function getSelectedSystemPrompt() {
+            const activeTab = document.querySelector('#systemPromptTabs .nav-link.active');
+            const activeTabId = activeTab.id;
+            switch (activeTabId) {
+                case 'default-tab':
+                    return document.getElementById('default-prompt').value;
+                case 'creative-tab':
+                    return document.getElementById('creative-prompt').value;
+                case 'analytical-tab':
+                    return document.getElementById('analytical-prompt').value;
+                case 'custom-tab':
+                    return document.getElementById('custom-prompt').value;
+                default:
+                    return 'You are a helpful AI assistant.';
+            }
+        }
+
         async function sendMessage() {
             const userInput = document.getElementById('user-input').value;
-            const systemPrompt = document.getElementById('system-prompt-input').value;
+            const systemPrompt = getSelectedSystemPrompt();
             const provider = document.getElementById('provider-select-1').value;
             const model = document.getElementById('model-select-1').value;
 
@@ -244,7 +319,7 @@
 
         async function compareResponses() {
             const userInput = document.getElementById('user-input').value;
-            const systemPrompt = document.getElementById('system-prompt-input').value;
+            const systemPrompt = getSelectedSystemPrompt();
             const provider1 = document.getElementById('provider-select-1').value;
             const model1 = document.getElementById('model-select-1').value;
             const provider2 = document.getElementById('provider-select-2').value;
@@ -330,7 +405,71 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
+        function loadCustomPrompts() {
+            const customPrompts = JSON.parse(localStorage.getItem('customPrompts')) || {};
+            for (const [name, prompt] of Object.entries(customPrompts)) {
+                addCustomPromptTab(name, prompt);
+            }
+        }
+
+        function addCustomPromptTab(name, prompt) {
+            const tabId = `custom-${name.toLowerCase().replace(/\s+/g, '-')}`;
+            const tab = document.createElement('li');
+            tab.className = 'nav-item';
+            tab.role = 'presentation';
+            tab.innerHTML = `
+                <button class="nav-link" id="${tabId}-tab" data-bs-toggle="tab" data-bs-target="#${tabId}" type="button" role="tab" aria-controls="${tabId}" aria-selected="false">${name}</button>
+            `;
+            document.querySelector('#systemPromptTabs').insertBefore(tab, document.querySelector('#custom-tab').parentNode);
+
+            const tabContent = document.createElement('div');
+            tabContent.className = 'tab-pane fade';
+            tabContent.id = tabId;
+            tabContent.role = 'tabpanel';
+            tabContent.setAttribute('aria-labelledby', `${tabId}-tab`);
+            tabContent.innerHTML = `
+                <textarea id="${tabId}-prompt" class="form-control" rows="3">${prompt}</textarea>
+                <div class="custom-prompt-actions">
+                    <button class="btn btn-primary btn-sm" onclick="updateCustomPrompt('${name}')">Update</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteCustomPrompt('${name}')">Delete</button>
+                </div>
+            `;
+            document.querySelector('#systemPromptTabContent').insertBefore(tabContent, document.querySelector('#custom'));
+        }
+
+        function saveCustomPrompt() {
+            const name = prompt("Enter a name for your custom prompt:");
+            if (name) {
+                const prompt = document.getElementById('custom-prompt').value;
+                const customPrompts = JSON.parse(localStorage.getItem('customPrompts')) || {};
+                customPrompts[name] = prompt;
+                localStorage.setItem('customPrompts', JSON.stringify(customPrompts));
+                addCustomPromptTab(name, prompt);
+                alert("Custom prompt saved successfully!");
+            }
+        }
+
+        function updateCustomPrompt(name) {
+            const prompt = document.getElementById(`custom-${name.toLowerCase().replace(/\s+/g, '-')}-prompt`).value;
+            const customPrompts = JSON.parse(localStorage.getItem('customPrompts')) || {};
+            customPrompts[name] = prompt;
+            localStorage.setItem('customPrompts', JSON.stringify(customPrompts));
+            alert("Custom prompt updated successfully!");
+        }
+
+        function deleteCustomPrompt(name) {
+            if (confirm(`Are you sure you want to delete the custom prompt "${name}"?`)) {
+                const customPrompts = JSON.parse(localStorage.getItem('customPrompts')) || {};
+                delete customPrompts[name];
+                localStorage.setItem('customPrompts', JSON.stringify(customPrompts));
+                document.querySelector(`#custom-${name.toLowerCase().replace(/\s+/g, '-')}-tab`).parentNode.remove();
+                document.querySelector(`#custom-${name.toLowerCase().replace(/\s+/g, '-')}`).remove();
+                alert("Custom prompt deleted successfully!");
+            }
+        }
+
         fetchModels();
+        loadCustomPrompts();
     </script>
 </body>
 </html>
