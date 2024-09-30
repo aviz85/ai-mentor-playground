@@ -149,6 +149,18 @@
             flex: 1;
             margin: 0 5px;
         }
+        .model-checkboxes {
+            margin-top: 15px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        .model-group {
+            margin-bottom: 10px;
+        }
+        .model-group h5 {
+            margin-bottom: 5px;
+        }
     </style>
 </head>
 <body>
@@ -159,19 +171,8 @@
         <div class="row g-0">
             <div class="col-md-3 p-3">
                 <h5 class="mb-3">Model Selection</h5>
-                <div class="mb-3">
-                    <select id="provider-select-1" class="form-select model-select mb-2">
-                        <option value="openai">OpenAI</option>
-                        <option value="anthropic">Anthropic</option>
-                    </select>
-                    <select id="model-select-1" class="form-select model-select"></select>
-                </div>
-                <div>
-                    <select id="provider-select-2" class="form-select model-select mb-2">
-                        <option value="openai">OpenAI</option>
-                        <option value="anthropic">Anthropic</option>
-                    </select>
-                    <select id="model-select-2" class="form-select model-select"></select>
+                <div id="model-checkboxes" class="model-checkboxes">
+                    <!-- Model checkboxes will be dynamically added here -->
                 </div>
             </div>
             <div class="col-md-9">
@@ -245,42 +246,56 @@
         let models = {};
 
         async function fetchModels() {
-            const response = await fetch('/models');
-            models = await response.json();
-            updateModelSelect(1);
-            updateModelSelect(2);
+            try {
+                const response = await fetch('/models');
+                models = await response.json();
+                populateModelCheckboxes();
+            } catch (error) {
+                console.error('Error fetching models:', error);
+            }
         }
 
-        function updateModelSelect(selectNumber) {
-            const provider = document.getElementById(`provider-select-${selectNumber}`).value;
-            const modelSelect = document.getElementById(`model-select-${selectNumber}`);
-            modelSelect.innerHTML = '';
-            models[provider].forEach(model => {
-                const option = document.createElement('option');
-                option.value = model;
-                option.textContent = model;
-                modelSelect.appendChild(option);
-            });
-        }
+        function populateModelCheckboxes() {
+            const container = document.getElementById('model-checkboxes');
+            container.innerHTML = ''; // Clear existing content
 
-        document.getElementById('provider-select-1').addEventListener('change', () => updateModelSelect(1));
-        document.getElementById('provider-select-2').addEventListener('change', () => updateModelSelect(2));
+            for (const [provider, providerModels] of Object.entries(models)) {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'model-group';
+                groupDiv.innerHTML = `<h5>${provider.charAt(0).toUpperCase() + provider.slice(1)}</h5>`;
+
+                providerModels.forEach(model => {
+                    const checkbox = document.createElement('div');
+                    checkbox.className = 'form-check';
+                    checkbox.innerHTML = `
+                        <input class="form-check-input" type="checkbox" value="${model}" id="${provider}-${model}">
+                        <label class="form-check-label" for="${provider}-${model}">${model}</label>
+                    `;
+                    groupDiv.appendChild(checkbox);
+                });
+
+                container.appendChild(groupDiv);
+            }
+        }
 
         function getSelectedSystemPrompt() {
             const activeTab = document.querySelector('#systemPromptTabs .nav-link.active');
-            const activeTabId = activeTab.id;
-            switch (activeTabId) {
-                case 'default-tab':
-                    return document.getElementById('default-prompt').value;
-                case 'creative-tab':
-                    return document.getElementById('creative-prompt').value;
-                case 'analytical-tab':
-                    return document.getElementById('analytical-prompt').value;
-                case 'custom-tab':
-                    return document.getElementById('custom-prompt').value;
-                default:
-                    return 'You are a helpful AI assistant.';
+            if (!activeTab) {
+                console.log('No active tab found');
+                return 'You are a helpful AI assistant.';
             }
+            
+            const activeTabId = activeTab.id.replace('-tab', '');
+            console.log('Active tab ID:', activeTabId);
+            
+            const promptTextarea = document.getElementById(`${activeTabId}-prompt`);
+            if (!promptTextarea) {
+                console.log(`No textarea found for ID: ${activeTabId}-prompt`);
+                return 'You are a helpful AI assistant.';
+            }
+            
+            console.log('Selected prompt:', promptTextarea.value);
+            return promptTextarea.value || 'You are a helpful AI assistant.';
         }
 
         async function sendMessage() {
@@ -308,22 +323,44 @@
                 }
 
                 const data = await response.json();
-                appendMessage('ai', data.message);
+                appendMessage('ai', data.message, `${provider} (${model})`);
             } catch (error) {
                 console.error('Error:', error);
-                appendMessage('ai', 'Sorry, there was an error processing your request.');
+                appendMessage('ai', 'Sorry, there was an error processing your request.', `${provider} (${model})`);
             }
 
             document.getElementById('user-input').value = '';
         }
 
+        function getCheckedModels() {
+            console.log('getCheckedModels function called');
+            const checkboxes = document.querySelectorAll('#model-checkboxes input[type="checkbox"]:checked');
+            console.log('Checked checkboxes:', checkboxes);
+            
+            const checkedModels = Array.from(checkboxes).map(checkbox => {
+                const [provider, ...modelParts] = checkbox.id.split('-');
+                return { provider, model: modelParts.join('-') };
+            });
+            
+            console.log('Checked models:', checkedModels);
+            return checkedModels;
+        }
+
         async function compareResponses() {
-            const userInput = document.getElementById('user-input').value;
+            console.log('compareResponses function called');
+
+            const userInputElement = document.getElementById('user-input');
+            if (!userInputElement) {
+                console.error('User input element not found');
+                alert('Error: User input element not found. Please refresh the page and try again.');
+                return;
+            }
+
+            const userInput = userInputElement.value;
+            console.log('User input:', userInput);
+
             const systemPrompt = getSelectedSystemPrompt();
-            const provider1 = document.getElementById('provider-select-1').value;
-            const model1 = document.getElementById('model-select-1').value;
-            const provider2 = document.getElementById('provider-select-2').value;
-            const model2 = document.getElementById('model-select-2').value;
+            console.log('System prompt:', systemPrompt);
 
             if (!userInput.trim()) {
                 alert('Please enter a message to compare.');
@@ -332,31 +369,42 @@
 
             appendMessage('user', userInput);
 
-            try {
-                const response = await fetch('/compare', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: userInput,
-                        system_prompt: systemPrompt,
-                        providers: [provider1, provider2],
-                        models: [model1, model2]
-                    })
-                });
+            const checkedModels = getCheckedModels();
+            console.log('Checked models:', checkedModels);
 
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-
-                const data = await response.json();
-                appendMessage('ai', `${provider1} (${model1}): ${data.results[0]}`);
-                appendMessage('ai', `${provider2} (${model2}): ${data.results[1]}`);
-            } catch (error) {
-                console.error('Error:', error);
-                appendMessage('ai', 'Sorry, there was an error processing your comparison request.');
+            if (checkedModels.length === 0) {
+                alert('Please select at least one model to compare.');
+                return;
             }
 
-            document.getElementById('user-input').value = '';
+            for (const modelInfo of checkedModels) {
+                try {
+                    console.log(`Sending request for ${modelInfo.provider} (${modelInfo.model})`);
+                    const response = await fetch('/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message: userInput,
+                            system_prompt: systemPrompt,
+                            provider: modelInfo.provider,
+                            model: modelInfo.model
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+
+                    const data = await response.json();
+                    console.log(`Response received for ${modelInfo.provider} (${modelInfo.model}):`, data);
+                    appendMessage('ai', data.message, `${modelInfo.provider} (${modelInfo.model})`);
+                } catch (error) {
+                    console.error(`Error with ${modelInfo.provider} (${modelInfo.model}):`, error);
+                    appendMessage('ai', `Error: ${error.message}`, `${modelInfo.provider} (${modelInfo.model})`);
+                }
+            }
+
+            userInputElement.value = '';
         }
 
         async function exportChatLog() {
@@ -396,24 +444,41 @@
             }
         }
 
-        function appendMessage(sender, content) {
+        function appendMessage(sender, content, modelInfo = null) {
             const chatBox = document.getElementById('chat-box');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${sender}-message`;
-            messageDiv.textContent = content;
+            
+            if (modelInfo) {
+                messageDiv.innerHTML = `<strong>${modelInfo}:</strong> ${content}`;
+            } else {
+                messageDiv.textContent = content;
+            }
+            
             chatBox.appendChild(messageDiv);
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        function loadCustomPrompts() {
-            const customPrompts = JSON.parse(localStorage.getItem('customPrompts')) || {};
-            for (const [name, prompt] of Object.entries(customPrompts)) {
-                addCustomPromptTab(name, prompt);
+        async function loadCustomPrompts() {
+            try {
+                const response = await fetch('/prompts');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch prompts');
+                }
+                const prompts = await response.json();
+                console.log('Loaded prompts:', prompts);
+                prompts.forEach(prompt => {
+                    console.log('Adding prompt:', prompt);
+                    addCustomPromptTab(prompt.id, prompt.name, prompt.content);
+                });
+            } catch (error) {
+                console.error('Error loading custom prompts:', error);
+                alert('Failed to load custom prompts. Please try refreshing the page.');
             }
         }
 
-        function addCustomPromptTab(name, prompt) {
-            const tabId = `custom-${name.toLowerCase().replace(/\s+/g, '-')}`;
+        function addCustomPromptTab(id, name, prompt) {
+            const tabId = `custom-${id}`;
             const tab = document.createElement('li');
             tab.className = 'nav-item';
             tab.role = 'presentation';
@@ -430,41 +495,70 @@
             tabContent.innerHTML = `
                 <textarea id="${tabId}-prompt" class="form-control" rows="3">${prompt}</textarea>
                 <div class="custom-prompt-actions">
-                    <button class="btn btn-primary btn-sm" onclick="updateCustomPrompt('${name}')">Update</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteCustomPrompt('${name}')">Delete</button>
+                    <button class="btn btn-primary btn-sm" onclick="updateCustomPrompt(${id}, '${name}')">Update</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteCustomPrompt(${id}, '${name}')">Delete</button>
                 </div>
             `;
             document.querySelector('#systemPromptTabContent').insertBefore(tabContent, document.querySelector('#custom'));
+            
+            // Ensure the content is set correctly
+            document.getElementById(`${tabId}-prompt`).value = prompt;
         }
 
-        function saveCustomPrompt() {
+        async function saveCustomPrompt() {
             const name = prompt("Enter a name for your custom prompt:");
             if (name) {
-                const prompt = document.getElementById('custom-prompt').value;
-                const customPrompts = JSON.parse(localStorage.getItem('customPrompts')) || {};
-                customPrompts[name] = prompt;
-                localStorage.setItem('customPrompts', JSON.stringify(customPrompts));
-                addCustomPromptTab(name, prompt);
-                alert("Custom prompt saved successfully!");
+                const content = document.getElementById('custom-prompt').value;
+                try {
+                    const response = await fetch('/prompts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, content })
+                    });
+                    if (!response.ok) {
+                        throw new Error('Failed to save prompt');
+                    }
+                    const newPrompt = await response.json();
+                    console.log('Saved new prompt:', newPrompt);
+                    addCustomPromptTab(newPrompt.id, newPrompt.name, newPrompt.content);
+                    alert("Custom prompt saved successfully!");
+                } catch (error) {
+                    console.error('Error saving custom prompt:', error);
+                    alert("Failed to save custom prompt. Please try again.");
+                }
             }
         }
 
-        function updateCustomPrompt(name) {
-            const prompt = document.getElementById(`custom-${name.toLowerCase().replace(/\s+/g, '-')}-prompt`).value;
-            const customPrompts = JSON.parse(localStorage.getItem('customPrompts')) || {};
-            customPrompts[name] = prompt;
-            localStorage.setItem('customPrompts', JSON.stringify(customPrompts));
-            alert("Custom prompt updated successfully!");
+        async function updateCustomPrompt(id, name) {
+            const content = document.getElementById(`custom-${id}-prompt`).value;
+            try {
+                const response = await fetch(`/prompts/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, content })
+                });
+                if (!response.ok) {
+                    throw new Error('Failed to update prompt');
+                }
+                console.log('Updated prompt:', { id, name, content });
+                alert("Custom prompt updated successfully!");
+            } catch (error) {
+                console.error('Error updating custom prompt:', error);
+                alert("Failed to update custom prompt. Please try again.");
+            }
         }
 
-        function deleteCustomPrompt(name) {
+        async function deleteCustomPrompt(id, name) {
             if (confirm(`Are you sure you want to delete the custom prompt "${name}"?`)) {
-                const customPrompts = JSON.parse(localStorage.getItem('customPrompts')) || {};
-                delete customPrompts[name];
-                localStorage.setItem('customPrompts', JSON.stringify(customPrompts));
-                document.querySelector(`#custom-${name.toLowerCase().replace(/\s+/g, '-')}-tab`).parentNode.remove();
-                document.querySelector(`#custom-${name.toLowerCase().replace(/\s+/g, '-')}`).remove();
-                alert("Custom prompt deleted successfully!");
+                try {
+                    await fetch(`/prompts/${id}`, { method: 'DELETE' });
+                    document.querySelector(`#custom-${id}-tab`).parentNode.remove();
+                    document.querySelector(`#custom-${id}`).remove();
+                    alert("Custom prompt deleted successfully!");
+                } catch (error) {
+                    console.error('Error deleting custom prompt:', error);
+                    alert("Failed to delete custom prompt. Please try again.");
+                }
             }
         }
 

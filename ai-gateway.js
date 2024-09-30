@@ -1,6 +1,7 @@
 const { Configuration, OpenAIApi } = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
 const dotenv = require('dotenv');
+const axios = require('axios');
 
 dotenv.config();
 
@@ -29,25 +30,40 @@ const ANTHROPIC_MODELS = [
 ];
 
 async function generateResponse(provider, model, messages, systemPrompt) {
-    if (provider === 'openai') {
-        const response = await openai.createChatCompletion({
-            model: model,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                ...messages.filter(msg => msg.content.trim() !== '')
-            ],
-        });
-        return response.data.choices[0].message.content;
-    } else if (provider === 'anthropic') {
-        const response = await anthropic.messages.create({
-            model: model,
-            max_tokens: 1024,
-            system: systemPrompt,
-            messages: messages.filter(msg => msg.content.trim() !== ''),
-        });
-        return response.content[0].text;
-    } else {
-        throw new Error('Invalid provider');
+    try {
+        if (provider === 'anthropic') {
+            const anthropicMessages = messages.filter(msg => msg.role !== 'system');
+            const response = await axios.post('https://api.anthropic.com/v1/messages', {
+                model: model,
+                messages: anthropicMessages,
+                system: systemPrompt,
+                max_tokens: 1000
+            }, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': process.env.ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01'
+                }
+            });
+            return response.data.content[0].text;
+        } else if (provider === 'openai') {
+            const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+                model: model,
+                messages: messages.map(({ role, content }) => ({ role, content })),
+                max_tokens: 1000
+            }, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+                }
+            });
+            return response.data.choices[0].message.content;
+        } else {
+            throw new Error(`Unsupported provider: ${provider}`);
+        }
+    } catch (error) {
+        console.error(`Error in generateResponse for ${provider}:`, error.response ? error.response.data : error.message);
+        throw error;
     }
 }
 
