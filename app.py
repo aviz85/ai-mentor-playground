@@ -1,59 +1,74 @@
-from flask import Flask, render_template, request, jsonify
-import openai
-from dotenv import load_dotenv
-import os
+const express = require('express');
+const bodyParser = require('body-parser');
+const dotenv = require('dotenv');
+const { generateResponse, OPENAI_MODELS, ANTHROPIC_MODELS } = require('./ai-gateway');
 
-# Load environment variables from .env file
-load_dotenv()
+// Load environment variables from .env file
+dotenv.config();
 
-app = Flask(__name__)
-openai.api_key = os.getenv('OPENAI_API_KEY')
+const app = express();
+app.use(bodyParser.json());
+app.use(express.static('public'));
 
-# Buffer to store the last 20 messages
-chat_history = []
+let chatHistory = [];
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+// Route to serve the index.html
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/public/index.html');
+});
 
-@app.route('/chat', methods=['POST'])
-def chat():
-    global chat_history
-    user_message = request.json.get('message')
-    system_prompt = request.json.get('system_prompt')
-    variables = request.json.get('variables', {})
+// Chat route
+app.post('/chat', async (req, res) => {
+    const userMessage = req.body.message;
+    const systemPrompt = req.body.system_prompt;
+    const variables = req.body.variables || {};
+    const provider = req.body.provider;
+    const model = req.body.model;
 
-    # Replace variables in the system prompt
-    for key, value in variables.items():
-        system_prompt = system_prompt.replace(f"${{{key}}}", value)
+    // Replace variables in the system prompt
+    let prompt = systemPrompt;
+    for (const [key, value] of Object.entries(variables)) {
+        prompt = prompt.replace(`\${${key}}`, value);
+    }
 
-    # Add user message to chat history
-    chat_history.append({"role": "user", "content": user_message})
+    // Add user message to chat history
+    chatHistory.push({ role: 'user', content: userMessage });
 
-    # Keep only the last 20 messages
-    if len(chat_history) > 20:
-        chat_history = chat_history[-20:]
+    // Keep only the last 20 messages
+    if (chatHistory.length > 20) {
+        chatHistory = chatHistory.slice(-20);
+    }
 
-    # Prepare messages for OpenAI API
-    messages = [{"role": "system", "content": system_prompt}] + chat_history
+    // Prepare messages for AI API
+    const messages = [{ role: 'system', content: prompt }, ...chatHistory];
 
-    # Call OpenAI API
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages
-    )
+    try {
+        const assistantMessage = await generateResponse(provider, model, messages);
 
-    # Get the assistant's reply
-    assistant_message = response.choices[0].message['content']
+        // Add assistant message to chat history
+        chatHistory.push({ role: 'assistant', content: assistantMessage });
 
-    # Add assistant message to chat history
-    chat_history.append({"role": "assistant", "content": assistant_message})
+        // Keep only the last 20 messages
+        if (chatHistory.length > 20) {
+            chatHistory = chatHistory.slice(-20);
+        }
 
-    # Keep only the last 20 messages
-    if len(chat_history) > 20:
-        chat_history = chat_history[-20:]
+        res.json({ message: assistantMessage });
+    } catch (error) {
+        console.error('Error calling AI API:', error.message);
+        res.status(500).json({ error: 'Failed to get response from AI API' });
+    }
+});
 
-    return jsonify({"message": assistant_message})
+// Route to get available models
+app.get('/models', (req, res) => {
+    res.json({
+        openai: OPENAI_MODELS,
+        anthropic: ANTHROPIC_MODELS,
+    });
+});
 
-if __name__ == '__main__':
-    app.run(debug=True)
+const PORT = process.env.PORT || 3010;
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
