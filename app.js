@@ -42,44 +42,41 @@ app.get('/', (req, res) => {
 
 // Chat route
 app.post('/chat', async (req, res) => {
+    console.log('\n--- New Chat Request ---\n');
+    
     const userMessage = req.body.message;
     const systemPrompt = req.body.system_prompt || "You are a helpful AI assistant.";
     const provider = req.body.provider;
     const model = req.body.model;
 
-    // Add user message to chat history
-    chatHistory.push({ role: 'user', content: userMessage });
+    // Prepare messages for AI API
+    let messages = chatHistory.map(msg => ({
+        role: msg.role === 'human' ? 'user' : msg.role, // Convert any 'human' roles to 'user'
+        content: msg.content || ''
+    }));
 
-    // Keep only the last 20 messages
-    if (chatHistory.length > 20) {
-        chatHistory = chatHistory.slice(-20);
-    }
-
-    // Prepare messages for AI API, excluding the 'model' field
-    const messages = [
-        { role: 'system', content: systemPrompt },
-        ...chatHistory.map(({ role, content }) => ({ role, content }))
-    ];
+    // Add the new user message
+    messages.push({ role: 'user', content: userMessage });
 
     try {
-        const assistantMessage = await generateResponse(provider, model, messages);
+        const assistantMessage = await generateResponse(provider, model, messages, systemPrompt);
 
-        // Add assistant message to chat history with model info
+        // Add user message and assistant message to chat history
+        chatHistory.push({ role: 'user', content: userMessage });
         chatHistory.push({ 
             role: 'assistant', 
             content: assistantMessage, 
             model: `${provider} (${model})`
         });
 
+        // Keep only the last 20 messages
+        if (chatHistory.length > 20) {
+            chatHistory = chatHistory.slice(-20);
+        }
+
         res.json({ message: assistantMessage });
     } catch (error) {
         console.error('Error calling AI API:', error.message);
-        // Add error message to chat history
-        chatHistory.push({ 
-            role: 'assistant', 
-            content: `Error: ${error.message}`, 
-            model: `${provider} (${model})`
-        });
         res.status(500).json({ error: `Failed to get response from AI API: ${error.message}` });
     }
 });

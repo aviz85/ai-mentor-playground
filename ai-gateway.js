@@ -32,13 +32,27 @@ const ANTHROPIC_MODELS = [
 async function generateResponse(provider, model, messages, systemPrompt) {
     try {
         if (provider === 'anthropic') {
-            const anthropicMessages = messages.filter(msg => msg.role !== 'system');
-            const response = await axios.post('https://api.anthropic.com/v1/messages', {
+            let anthropicMessages = messages.filter(msg => msg.role !== 'system').map(msg => ({
+                role: msg.role === 'human' ? 'user' : msg.role, // Convert 'human' to 'user' if present
+                content: msg.content || ''
+            }));
+
+            // Ensure the first message has the "user" role
+            if (anthropicMessages.length === 0 || anthropicMessages[0].role !== 'user') {
+                anthropicMessages.unshift({ role: 'user', content: 'Hello' });
+            }
+
+            const requestBody = {
                 model: model,
                 messages: anthropicMessages,
                 system: systemPrompt,
                 max_tokens: 1000
-            }, {
+            };
+
+            console.log('Anthropic API Request:');
+            console.log(JSON.stringify(requestBody, null, 2));
+
+            const response = await axios.post('https://api.anthropic.com/v1/messages', requestBody, {
                 headers: {
                     'Content-Type': 'application/json',
                     'X-API-Key': process.env.ANTHROPIC_API_KEY,
@@ -47,9 +61,16 @@ async function generateResponse(provider, model, messages, systemPrompt) {
             });
             return response.data.content[0].text;
         } else if (provider === 'openai') {
+            const openaiMessages = [
+                { role: 'system', content: systemPrompt },
+                ...messages.map(msg => ({
+                    role: msg.role,
+                    content: msg.content || ''
+                }))
+            ];
             const response = await axios.post('https://api.openai.com/v1/chat/completions', {
                 model: model,
-                messages: messages.map(({ role, content }) => ({ role, content })),
+                messages: openaiMessages,
                 max_tokens: 1000
             }, {
                 headers: {
