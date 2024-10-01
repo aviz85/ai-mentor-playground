@@ -227,7 +227,7 @@
                     </button>
                 </div>
                 <div class="col-md-4">
-                    <button class="btn btn-info btn-custom w-100" onclick="exportChatLog()">
+                    <button class="btn btn-info btn-custom w-100" onclick="exportChatLogs()">
                         <i class="fas fa-file-export me-2"></i>Export
                     </button>
                 </div>
@@ -407,25 +407,26 @@
             userInputElement.value = '';
         }
 
-        async function exportChatLog() {
-            try {
-                const response = await fetch('/export');
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = 'chat_log.json';
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-            } catch (error) {
-                console.error('Error exporting chat log:', error);
-                alert('Failed to export chat log. Please try again.');
-            }
+        function exportChatLogs() {
+            fetch('/export')
+                .then(response => {
+                    const contentDisposition = response.headers.get('content-disposition');
+                    const filename = contentDisposition
+                        ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+                        : 'chat_log.json';
+                    return response.blob().then(blob => ({ blob, filename }));
+                })
+                .then(({ blob, filename }) => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                })
+                .catch(error => console.error('Error:', error));
         }
 
         async function clearChat() {

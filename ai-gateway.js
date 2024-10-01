@@ -29,19 +29,17 @@ const ANTHROPIC_MODELS = [
     'claude-3-haiku-20240307',
 ];
 
-async function generateResponse(provider, model, messages, systemPrompt) {
+async function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function generateResponse(provider, model, messages, systemPrompt, retries = 3) {
     try {
         if (provider === 'anthropic') {
-            let anthropicMessages = messages.filter(msg => msg.role !== 'system').map(msg => ({
-                role: msg.role === 'human' ? 'user' : msg.role, // Convert 'human' to 'user' if present
-                content: msg.content || ''
-            }));
-
-            // Ensure the first message has the "user" role
-            if (anthropicMessages.length === 0 || anthropicMessages[0].role !== 'user') {
-                anthropicMessages.unshift({ role: 'user', content: 'Hello' });
-            }
-
+            let anthropicMessages = messages
+                .filter(msg => msg.role !== 'system')
+                .map(({ role, content }) => ({ role, content })); // Remove any extra fields like 'model'
+            
             const requestBody = {
                 model: model,
                 messages: anthropicMessages,
@@ -59,30 +57,41 @@ async function generateResponse(provider, model, messages, systemPrompt) {
                     'anthropic-version': '2023-06-01'
                 }
             });
+
+            console.log('Anthropic API Response:');
+            console.log(JSON.stringify(response.data, null, 2));
+
             return response.data.content[0].text;
         } else if (provider === 'openai') {
-            const openaiMessages = [
-                { role: 'system', content: systemPrompt },
-                ...messages.map(msg => ({
-                    role: msg.role,
-                    content: msg.content || ''
-                }))
-            ];
-            const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+            const requestBody = {
                 model: model,
-                messages: openaiMessages,
+                messages: messages,
                 max_tokens: 1000
-            }, {
+            };
+
+            console.log('OpenAI API Request:');
+            console.log(JSON.stringify(requestBody, null, 2));
+
+            const response = await axios.post('https://api.openai.com/v1/chat/completions', requestBody, {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
                 }
             });
+
+            console.log('OpenAI API Response:');
+            console.log(JSON.stringify(response.data, null, 2));
+
             return response.data.choices[0].message.content;
         } else {
             throw new Error(`Unsupported provider: ${provider}`);
         }
     } catch (error) {
+        if (error.response && error.response.status === 529 && retries > 0) {
+            console.log(`Anthropic API overloaded. Retrying in ${2 ** (3 - retries)} seconds...`);
+            await sleep(2 ** (3 - retries) * 1000);
+            return generateResponse(provider, model, messages, systemPrompt, retries - 1);
+        }
         console.error(`Error in generateResponse for ${provider}:`, error.response ? error.response.data : error.message);
         throw error;
     }
