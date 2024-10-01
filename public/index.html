@@ -409,24 +409,20 @@
 
         function exportChatLogs() {
             fetch('/export')
-                .then(response => {
-                    const contentDisposition = response.headers.get('content-disposition');
-                    const filename = contentDisposition
-                        ? contentDisposition.split('filename=')[1].replace(/"/g, '')
-                        : 'chat_log.json';
-                    return response.blob().then(blob => ({ blob, filename }));
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Export error:', data.error);
+                        alert('Failed to export chat logs: ' + data.error);
+                    } else {
+                        console.log('Export successful:', data.exportedFiles);
+                        alert('Chat logs exported successfully. Files: ' + data.exportedFiles.join(', '));
+                    }
                 })
-                .then(({ blob, filename }) => {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                })
-                .catch(error => console.error('Error:', error));
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while exporting chat logs');
+                });
         }
 
         async function clearChat() {
