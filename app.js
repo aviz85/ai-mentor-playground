@@ -4,7 +4,7 @@ const dotenv = require('dotenv');
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs').promises;
 const path = require('path');
-const { generateResponse, compareResponses, OPENAI_MODELS, ANTHROPIC_MODELS } = require('./ai-gateway');
+const { generateResponse, compareResponses, OPENAI_MODELS, ANTHROPIC_MODELS, GOOGLE_MODELS } = require('./ai-gateway');
 
 dotenv.config();
 
@@ -64,7 +64,6 @@ app.post('/chat', async (req, res) => {
 
     // Prepare messages for AI API (without timestamps)
     let messages = [
-        { role: 'system', content: systemPrompt },
         ...modelBuffers[modelKey].map(msg => ({ role: msg.role, content: msg.content })),
         { role: 'user', content: userMessage }
     ];
@@ -145,6 +144,7 @@ app.get('/models', (req, res) => {
     res.json({
         openai: OPENAI_MODELS,
         anthropic: ANTHROPIC_MODELS,
+        google: GOOGLE_MODELS,
     });
 });
 
@@ -248,7 +248,10 @@ app.get('/export', async (req, res) => {
 // Clear chat history route
 app.post('/clear', (req, res) => {
     try {
-        modelBuffers = {};
+        // Clear all properties of modelBuffers instead of reassigning it
+        Object.keys(modelBuffers).forEach(key => {
+            modelBuffers[key] = [];
+        });
         res.status(200).json({ message: 'Chat history cleared successfully' });
     } catch (error) {
         console.error('Error clearing chat history:', error.message);

@@ -1,5 +1,6 @@
 const { Configuration, OpenAIApi } = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const dotenv = require('dotenv');
 const axios = require('axios');
 
@@ -14,6 +15,8 @@ const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+
 const OPENAI_MODELS = [
     'gpt-4o',
     'gpt-4o-mini',
@@ -27,6 +30,12 @@ const ANTHROPIC_MODELS = [
     'claude-3-opus-20240229',
     'claude-3-sonnet-20240229',
     'claude-3-haiku-20240307',
+];
+
+const GOOGLE_MODELS = [
+    'gemini-1.5-flash',
+    'gemini-2.0-flash-exp',
+    'gemini-1.5-pro-002'
 ];
 
 async function sleep(ms) {
@@ -83,12 +92,23 @@ async function generateResponse(provider, model, messages, systemPrompt, retries
             console.log(JSON.stringify(response.data, null, 2));
 
             return response.data.choices[0].message.content;
+        } else if (provider === 'google') {
+            const googleModel = genAI.getGenerativeModel({ model: model });
+            
+            // Prepare messages for Google API
+            const googleMessages = messages.map(msg => msg.content).join('\n');
+
+            // Add system prompt if provided
+            const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${googleMessages}` : googleMessages;
+
+            const result = await googleModel.generateContent(fullPrompt);
+            return result.response.text();
         } else {
             throw new Error(`Unsupported provider: ${provider}`);
         }
     } catch (error) {
         if (error.response && error.response.status === 529 && retries > 0) {
-            console.log(`Anthropic API overloaded. Retrying in ${2 ** (3 - retries)} seconds...`);
+            console.log(`API overloaded. Retrying in ${2 ** (3 - retries)} seconds...`);
             await sleep(2 ** (3 - retries) * 1000);
             return generateResponse(provider, model, messages, systemPrompt, retries - 1);
         }
@@ -111,4 +131,5 @@ module.exports = {
     compareResponses,
     OPENAI_MODELS,
     ANTHROPIC_MODELS,
+    GOOGLE_MODELS,
 };
